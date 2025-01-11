@@ -1,4 +1,6 @@
-import mongoose, { Schema } from "mongoose";
+const mongoose = require("mongoose");
+const Schema = mongoose.Schema;
+const RoomAvailability = require("./roomAvailability");
 
 const hotelSchema = new Schema(
   {
@@ -122,8 +124,38 @@ const hotelSchema = new Schema(
       totalRating: { type: Number, default: 0 },
       totalUsers: { type: Number, default: 0 },
     },
+    totalRooms: { type: Number, required: true },
   },
   { timestamps: true }
 );
+// Post-save hook
+hotelSchema.post("save", async function (hotel) {
+  const startDate = new Date();
+  const endDate = new Date();
+  endDate.setDate(startDate.getDate() + 30); // 60 days ahead
 
-export const Hotel = mongoose.model("Hotel", hotelSchema);
+  let currentDate = new Date(startDate);
+
+  // Iterate through each day for the next 60 days
+  while (currentDate <= endDate) {
+    const existingAvailability = await RoomAvailability.findOne({
+      hotelId: hotel._id,
+      date: currentDate,
+    });
+
+    if (!existingAvailability) {
+      // Create room availability record for each day
+      await RoomAvailability.create({
+        hotelId: hotel._id,
+        date: currentDate,
+        availableRooms: hotel.totalRooms, // Initially set available rooms to total rooms
+        bookedRooms: 0,
+      });
+    }
+
+    // Move to the next day
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+});
+
+module.exports = mongoose.model("Hotel", hotelSchema);
